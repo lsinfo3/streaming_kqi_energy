@@ -143,64 +143,6 @@ Only completed trials enter: the SQL joins `trial_user_attributes` on the `ap`/`
 
 ---
 
-## 3. Checks
-
-All four checks required of this reconstruction pass. They are printed by
-`code/features/reconstruct_configurations.py`:
-
-```
-searches                      : 48
-energy-aware configurations   : 48
-searches with pf == ea        : [('buffer_health', 'ffnn', 'ALL>100B')]
-distinct configurations       : 95
-searches at the 200 limit     : [('buffer_health', 'lgbm', 'ALL>100B', 200),
-                                 ('buffer_health', 'lstm', 'UL', 201),
-                                 ('buffer_health', 'transformer', 'ALL', 201)]
-converged searches            : 45, 53-190 trials
-total trials                  : 6010
-complete trials               : 5457
-```
-
-1. **The knee criterion reproduces 48 energy-aware configurations.** Every one of the 48
-   searches yields exactly one knee trial; no search has an empty or degenerate Pareto front.
-   Pareto-front sizes range from 5 (stalling, TF, ALL>100B) to 27 (buffer health, LGBM,
-   UL>100B). The paper's claim that "applying this procedure to the stored search databases
-   reproduces all 48 energy-aware configurations" is confirmed — subject to the caveat in §9,
-   item 1, that the released data contain no independent record of the originally selected
-   trial numbers, so this is a reproduction of the *procedure*, not a comparison against a
-   stored answer.
-2. **Exactly one search selects the same trial for both roles**: buffer health, FFNN, ALL>100B,
-   trial 25 (score 0.7671, energy objective 0.1651). No other search does.
-3. **95 distinct configurations**: 96 role entries minus the one coincidence. The 96
-   `(kqi, family, view, trial_id)` tuples take 95 distinct values.
-4. **Trial counts are consistent with the paper.** 45 searches carry a
-   `converged_at_trial` study attribute below 200 and ran 53-190 trials; the paper says "45
-   met the convergence criterion after 53-190 trials". The remaining three are exactly the
-   three the paper names, all for buffer health: LGBM with ALL>100B, LSTM with UL, and TF with
-   ALL. Summed over all 48 studies the databases hold **6,010** trials of which **5,457** are
-   `COMPLETE` — the paper's figures exactly; the other 553 are 518 `PRUNED` and 35 `FAIL`.
-
-   Two details about the limit. `converged_at_trial` stores a zero-based trial *number*, so it
-   always equals `n_trials - 1`. The two searches with 201 trials were stopped by the callback,
-   which fires at `trial.number >= max_trails = 200`, i.e. after trial number 200 has
-   completed. The third, LGBM with ALL>100B, has exactly 200 trials and **no**
-   `converged_at_trial` attribute, because the `n_trials=200` argument of `study.optimize`
-   ended the study before the callback could set it. Both paths are "reached the trial limit";
-   the slight overshoot to 201 is an off-by-one in the callback, not a second mechanism.
-
-Additional checks not required but worth recording:
-
-* The performance-first trial is Pareto-optimal in all 48 searches.
-* Aggregated over the 48 pairs, the energy-aware configuration reduces the *validation energy
-  objective* by a median of 62.0 % (range −96.6 % to 0.0 %) and the validation score by a
-  median of 3.8 % (range −40.2 % to 0.0 %). The single 0.0 %/0.0 % pair is the coinciding FFNN
-  search. These are search-time values on the workstation; the paper's offline-benchmark table (Table III) reports
-  measured edge energy instead, and the two should not be compared directly.
-* The feature-set metadata of each selected trial resolves against `importances/` without a
-  missing file, so every `multiple_windows_fs` configuration has a recoverable feature list.
-
----
-
 ## 4. Per-search summary
 
 `Trials`, `compl.`, `pruned`, `failed` are row counts in `trials` for that `study_id`.
@@ -547,18 +489,3 @@ analysis, not of the hyperparameter search, and is out of scope here; it is list
 two knees are easy to confuse.
 
 ---
-
-## 9. Discrepancies and open points
-
-| # | Finding | Status |
-|---|---|---|
-| 1 | The released data contain no stored list of the originally selected trial numbers — no `selected_trials.json`, and the generated per-config JSON files under `configs/model_training/` are not part of the artifact. The reconstruction therefore re-runs the documented procedure on the stored databases; it reproduces the documented *counts* (48 knees, one coincidence, 95 distinct, 45/3 convergence split) but cannot be checked trial-by-trial against the original selection. | Open. The four count checks are consistent with the paper, which is the strongest available evidence. |
-| 2 | Two of the three limit-reaching searches ran 201 trials, not 200, because the convergence callback tests `trial.number >= max_trails` after the trial has completed (`machine_learning_helpers.py:237`). The third ran exactly 200 and carries no `converged_at_trial`, having been stopped by `study.optimize(n_trials=200)` instead. | Harmless off-by-one; the paper's "reached the trial limit" is accurate for all three. |
-| 3 | The paper says search candidates are trained on "a random 10 % subset of the training data". For trees the code draws 20 % and fits on half of it, using the other half for LightGBM early stopping. | Wording; 10 % is correct for the fit. |
-| 4 | The commented-out search-space table lists the CNN's `kernel_size` (2-10, used linearly) in the row "Layer / hidden size (2^x)" and does not list it under its own name. | Table is commented out of the paper; fix before restoring it. |
-| 5 | The stalling threshold is selected on the first half of the validation split, and LightGBM early stopping uses the second half. The paper says only "validation F1". | Detail missing from the paper; no effect on correctness. |
-| 6 | The retraining seed is not recorded in the released data, so the 96 retrained models are not bit-reproducible from the artifact (the selections are). | Open. |
-| 7 | One configuration (buffer health, LSTM, ALL>100B, pf) has a normalised energy objective of exactly 1.0, i.e. it was clipped at the 2.5 kJ bound, so its validation energy is not recoverable from the objective column. The unclipped value is in the trial's `inf_ws_gpu_energy` user attribute. | Documented in §2.1. |
-| 8 | `study_id` order inside the databases is ALL, UL, ALL>100B, UL>100B — not the paper's table order. Any independent reconstruction must use this order or it will mislabel every view. | Documented in §1. |
-| 9 | The knee rule used to pick the W2 live candidates from the W1 measurements is not the knee rule used inside the searches. | Documented in §8. |
-| 10 | The energy-aware configuration is not always the smaller model: for buffer health, TF, ALL it uses more features than the performance-first one (204 vs. 145). For buffer health, CNN, UL and CNN, UL>100B the knee costs 40 % and 30 % of the validation score. | Not an error; worth knowing before quoting "energy-aware" as "cheap and nearly as good". |

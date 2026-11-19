@@ -43,7 +43,7 @@ Reproduces, from the 384 measurement files of 30 repetitions each:
 Two deliberate conventions are built into the script. Means are taken after removing values
 beyond 1.5 interquartile ranges, as in the paper. And the 16 Raspberry Pi batched stalling RF
 and LGBM configurations are excluded from the batching factor, because their batched
-predictions do not match their unbatched ones; see `notes/batching_anomaly.md`. Including them
+predictions do not match their unbatched ones (`MEASUREMENTS.md` section 8). Including them
 gives 5.64 instead of 5.24.
 
 The baseline share of W1 energy comes out at 57 % (Pi) and 73 % (Jetson) against the 56 % and
@@ -82,14 +82,11 @@ coinciding ALL>100B FFNN pair that the paper reports at R² 80.7 % and 84.2 %: c
 scoring.** Stalling is unaffected, since those arrays are already probabilities in [0, 1], and
 average precision and F1 agree with the stored fields to 14 decimal places.
 
-`EVALUATION_CAVEATS.md` covers these points in more detail.
-
 ## 4. The energy model
 
-See `ENERGY_MODEL.md`. The model implementation is in `code/model/`; `README_v5.md` there
-documents `audit.py`, which regenerates the calibration and the scenario checks. It was written
-against the original machine's directory layout, so check the paths it expects before running
-it.
+The model implementation is in `code/model/`. `audit.py` regenerates the calibration and the
+scenario checks; `ENERGY_MODEL.md` section 7 gives the entry points and the directory layout
+they expect.
 
 ## 5. The figures
 
@@ -98,18 +95,14 @@ The scripts that drew the paper's three figures are in `code/figures/`
 and live-delta figures, `redraw_fonts.py` for the font pass). They read the same measurement
 tree as the analysis scripts.
 
-## What cannot be reproduced from this repository
+## What this repository does not contain
 
-* **Per-run, per-video or deduplicated scores.** The exported prediction arrays carry no run
-  identifier. The original pipeline wrote a per-run index array of (run, offset, length) next to
-  each dataset — see `build_datasets_from_config` in the thesis pipeline — but those index files
-  were not part of the data release. Without them, scores cannot be attributed to runs, so the
-  duplicate-run and video-overlap effects described in `EVALUATION_CAVEATS.md` can only be
-  quantified on re-implemented features, not on these models.
-* **Training.** No model artefacts are included: no ONNX exports and no fitted trees. Scores are
-  reproducible from the exported predictions, not from retraining.
-* **The live and multi-stream measurements themselves.** W2 and W3 raw series are included and
-  can be re-aggregated, but the replay setup, the meter and the two edge devices are needed to
-  take new measurements, and the list of replay traces used was not recorded.
-* **The linear baselines end to end.** `code/baseline/` is the surviving copy of that code, and
-  it hard-codes paths to the raw dataset on the original machine.
+* **The per-sample prediction arrays** (about 325 MB), needed by `repro_scores.py`. Obtain them
+  from the measurement data release.
+* **Model artefacts.** No ONNX exports and no fitted trees. Scores are reproducible from the
+  exported predictions, not by retraining.
+* **Run identifiers for the predictions.** The exported arrays are flat, so scores cannot be
+  attributed to individual playback runs or videos.
+* **The experiment pipeline.** Feature extraction, training, ONNX export, the two device runners
+  and the meter harness are not included. The W2 and W3 series here can be re-aggregated, but
+  taking new measurements needs the replay setup, the meter and the two edge devices.

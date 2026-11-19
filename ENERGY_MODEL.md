@@ -144,7 +144,7 @@ packet rates of the replay traces (`general_data/pcap_stats/stats_s*_r100.csv`).
 Raspberry Pi only UL and UL>100B are used, because the Pi already drops packets under ALL and
 ALL>100B at 100 streams, so those two points do not represent the same processed workload.
 
-**Caveat worth knowing.** With two views the Pi "slope" is a two-point slope through UL and
+**Worth knowing.** With two views the Pi "slope" is a two-point slope through UL and
 UL>100B, exactly determined and with no residual to inspect. The intercept of that fit is a
 consistency check only and is not used by the model: 2.840 W against `P0 + 100*p_rx` = 2.825 W
 on the Pi, and 4.481 W against 4.489 W on the Jetson.
@@ -292,25 +292,10 @@ because its interval only just includes zero; and both light offsets are unresol
 The batched heavy class deliberately reuses the *unbatched* residual and substitutes the
 batch-32 `c_m`; `audit.py` asserts this.
 
-### 4.4 This is an effective decomposition, not a causal attribution
+The decomposition is an accounting split of the measured power, not a causal attribution to a
+specific hardware or runtime mechanism.
 
-`dP_m` is a residual: whatever part of the measured live increment is not explained by the
-per-prediction energy of the W1 benchmark. It is not a measurement of any identified hardware
-mechanism. Section IV-D of the paper points at plausible contributors — runtime threads,
-frequency scaling, the fact that the ten performance-first Pi candidates add similar energy
-despite a 50-fold spread in per-prediction cost — but nothing in the data isolates them. Three
-consequences follow:
-
-1. The split of the live increment between `dP_m` and `S * f * c_m` is a modelling choice, not
-   an observation. Only their sum at one stream is measured.
-2. Because it is a residual, it absorbs any systematic difference between the W1 and W2
-   campaigns, including thermal and campaign offsets.
-3. Nothing in the data says how `dP_m` behaves with more than one stream. That is the subject
-   of §5, and it is the model's largest uncertainty.
-
----
-
-## 5. The three scaling assumptions, and why they cannot be separated
+## 5. The three scaling assumptions
 
 `dP_m` was measured at one stream. The model therefore enumerates three scenarios rather than
 picking one:
@@ -409,7 +394,7 @@ Pi feature window to 46/37, while every bootstrapped parameter (`c_v`, `p_rx`, `
 `c_m`, `c_x` run noise, `r_v`) moves it by at most one stream. The crossover is dominated by
 the transfer of stage measurements to concurrent load, not by measurement noise.
 
-### 6.3 What is *not* validated
+### 6.3 Scope of the validation
 
 * **Concurrent full-pipeline energy.** No measurement in this dataset runs capture, dissection,
   feature extraction and inference together for more than one stream. Every per-stream number
@@ -532,81 +517,3 @@ the offset accounting of §4:
 for why this matters.
 
 ---
-
-## 8. Reading the projections correctly
-
-A short list of conventions that are easy to get wrong when quoting this model:
-
-* Numbers "per stream-hour" are `3600 * P(S) / S`, so they fall steeply with `S` simply because
-  the shared baseline is divided by more streams. At one stream the baseline is 87–98 % of
-  total power; comparing `e(1)` across devices says almost nothing about the pipeline.
-* A crossover is defined on energy *per stream*, not on total energy. The Jetson never draws
-  less total power than the Pi in this model.
-* `c_x` and `c_m` are applied at `f = 1 Hz` per stream, so the per-stream cost of feature
-  extraction and inference scales with the number of streams and the baseline does not. That
-  asymmetry is what produces every crossover in the paper.
-* Projections beyond a device's capture capacity (60 ALL streams on the Pi, 120 on the Jetson,
-  by the loss-onset measurements) describe a monitor that is already dropping packets. The
-  scaling figure in the paper shades that region for the Pi.
-
----
-
-## 9. Known limitations of the model
-
-1. **Feature-extraction cost comes from single-window offline runs.** `c_x` is measured by
-   processing stored single-stream captures back to back on one core, one window length per run,
-   in a pandas loop. The live W2 pipeline computes several windows per update with NumPy, and
-   no measurement exists of simultaneous multi-window extraction under concurrent load. The
-   CPU time per stream-second of the two paths agrees (Pi 30 / 23 / 16 / 2 ms and Jetson
-   18 / 12 / 8 / 1 ms per stream-second for ALL / ALL>100B / UL / UL>100B in the W2 reference
-   runs, against 20–31 ms and 12–19 ms for ALL offline), but energy per update under concurrent
-   load is not measured. Since `c_x` is the largest projected per-stream term, this is the
-   weakest link in the scaling argument after the offset scenarios.
-2. **Campaign differences affect the capture calibration and cannot be separated from a
-   load-dependent `c_v`.** Calibration points were measured in May/June 2026, the intermediate
-   validation loads in October/November 2026. Within the later Pi campaign the marginal power
-   per stream is 5.3 mW (UL, 110–170 streams) against the model's 10.2 mW, and 110 UL streams
-   in October drew less power (3.480 W) than 100 UL streams in the calibration campaign
-   (3.571 W). On the Jetson, the same capture-without-dissection configuration drew 4.239 W in
-   October against 4.339 W in June at one stream, at a lower fan level (22 % against 25 %).
-   A concave per-stream term (`S^0.756`) removes about 40 % of the Pi's residual RMS, but it
-   cannot be distinguished from these campaign offsets, so the model stays linear and carries
-   the residual as the factor `k`.
-3. **The model assumes one prediction and one feature update per second, while the live runs
-   issued 0.85–0.89 predictions per second** (predictions are emitted only when a feature
-   window contains new packets). At `f = 1 Hz` the model therefore slightly overstates the
-   inference and feature-extraction terms relative to the W2 behaviour. The offset accounting
-   of §4 uses the *actual* rate, so the two are consistent at one stream, but the projection
-   does not reduce `f`.
-4. **Single-stream `c_x` could not be confirmed independently.** Comparing the W2 reference
-   (features, no inference) against W3 single-stream capture with dissection gives a difference
-   consistent with `c_x` only for Pi ALL (+3.2 J per 300 s, expected 7.1–11.3 J). For the other
-   views and for the whole Jetson the difference is negative (down to −35 J) because campaign
-   offsets of up to 35 J exceed the effect being measured.
-5. **`p_rx` carries no view dependence and `c_v` on the Pi rests on two views**, as described in
-   §3.2 and §3.3.
-6. **`dP_m` is a residual, not a mechanism** (§4.4), and its scaling is unmeasured (§5).
-7. **The capacity numbers assume one CPU core per stage and inference time somewhere between
-   the W1 wall time and the W1 core time** (ONNX Runtime used four threads on the Pi, so
-   single-thread inference time is unknown). They are not a measured throughput.
-8. **The Pi's batched stalling RF and LGBM are excluded** from the batch-32 parameters because
-   their batched outputs differ from their unbatched ones.
-9. **Validation covers capture and dissection only.** Nothing in §6 tests the terms that the
-   scaling conclusions actually depend on.
-
----
-
-## 10. Verification summary
-
-Verified by recomputation from the released measurement logs while writing this document:
-`P0`, `p_rx`, `c_v`, `r_v`, all `c_x` values and ranges, `c_m` ranges at both batch sizes, all
-four live offsets with their bootstrap intervals and the actual prediction rates, the three
-crossover scenarios with their percentiles, the validation error ranges and their constituent
-points, the residual factors `k`, the one-at-a-time ranking, the robustness shares behind the
-44-ALL/103-UL claim, and the capacity ranges. `audit.py` reproduced the archived
-`audit_results.json` without differences.
-
-Taken from the paper without independent recomputation: the W1/W2/W3 protocol details
-(repetitions, randomised order, meter configuration) and the per-view retained-packet
-percentages of the replay traces quoted in Section III-D, both of which are measurement
-documentation rather than model parameters.

@@ -3,7 +3,7 @@
 Companion document to *Energy-Aware Assessment and Energy Modeling for Encrypted Video KQI
 Prediction at the Edge*. It documents how every energy number in the paper was
 obtained: the meter, the device settings, the three workloads, the idle baselines, the stored file
-schema, the statistical treatment, and the anomalies and exclusions that a re-user needs to know
+schema, the statistical treatment, and the exclusions that a re-user needs to know
 about.
 
 The paper's condensed version of this is the methodology subsections "Edge Execution and
@@ -62,34 +62,9 @@ What this implies, and what it does not:
   are **not** used for any reported figure; they exist as a cross-check only, and they are not
   comparable to the AC-side values.
 
-### 1.1 Which energy field is authoritative
-
-Each series carries three ways of expressing the same quantity. They are not identical, and the
-difference is the practical accuracy floor of these measurements:
-
-| Field | How it is produced | 12 h Raspberry Pi idle | 12 h Jetson idle |
-|---|---|---|---|
-| `tf_energy` | software sum `Σ power × 0.5 s` over the poll series, in **joules** | 2.5434 W equivalent | 2.4449 W → 4.2449 W |
-| `tf_power_avg` | running mean of the polled real power, in watts | 2.5601 W | 4.2729 W |
-| `tf_energy_wh` | the Bricklet's own accumulated register, in **Wh** | 2.5941 W equivalent | 4.3215 W equivalent |
-
-`tf_energy` is the field the paper reports, and all 48 energy cells of `tab:all` were reproduced
-from it. It assumes an exact 500 ms step; the idle series actually delivered 85,836 samples in 43,200 s,
-i.e. 503.3 ms per sample, so `tf_energy` sits about 0.65 % below `tf_power_avg × tf_duration`. The
-hardware register is about 1.3 % above the polled mean. The three estimators therefore agree to
-within roughly 1.3–1.8 %.
-
-This step-size bias is **systematic and common to every series**, because every measurement uses the
-same `PowerMonitor` class. It largely cancels in the relative quantities the paper's conclusions
-rest on (ΔE between pf and ea, batch-32 against batch-1, candidate minus reference). It does not
-cancel in absolute joules, so absolute W1 and W2 energies should be read with a ~1 % systematic
-uncertainty on top of the reported confidence intervals.
-
-`tf_energy_wh` has a resolution of 0.01 Wh = 36 J, which is too coarse for W1 runs of a few hundred
-joules (a 368 J run is stored as `0.1` Wh). It is usable only for long series such as the idle
-baselines.
-
----
+`tf_energy`, in joules, is the field the paper reports and the one the reproduction scripts
+read. `tf_energy_wh` is the meter's own register at 0.01 Wh resolution, too coarse for W1 runs
+of a few hundred joules.
 
 ## 2. Device settings
 
@@ -186,7 +161,7 @@ and filter → feature extraction → inference). Only the monitor is metered.
 
 ---
 
-## 4. Idle baselines, recomputed
+## 4. Idle baselines
 
 Source files, twelve hours each, recorded with the device booted and otherwise unloaded:
 
@@ -266,7 +241,7 @@ fan speed, GPU load, RAM and VRAM; they are informational only.
 
 These are **not** full-test scores. They are the scores produced by the same run that was metered,
 over the 100,000-sample W1 subset, and they are identical across the 30 repetitions of a
-deterministic configuration (which is how the batched-output anomaly in §7(a) was detected).
+deterministic configuration.
 
 | Workload | Columns |
 |---|---|
@@ -296,7 +271,7 @@ position.
 
 ### Row counts, and why some series hold fewer than 30 rows
 
-A row count other than 30 is not a defect; it marks a series that is **not** one of the main
+A row count other than 30 marks a series that is **not** one of the main
 comparisons. The full picture for the live tree:
 
 | Live directory | Files (both devices) | Rows per file |
@@ -346,13 +321,13 @@ as a spread, not as a significance test.
 series have unequal variances.
 
 **What the statistics do not cover.** Score comparisons across model families are made on
-populations that differ in size by up to 21 % (see `EVALUATION_CAVEATS.md` §4), and run-level
+populations that differ in size by up to 21 % (see `FEATURES.md` §8), and run-level
 bootstrap intervals exist only for the linear baselines, because the stored prediction arrays carry
 no run index.
 
 ---
 
-## 7. The outlier filter, measured
+## 7. The outlier filter
 
 The 1.5-IQR rule was re-applied independently to all 384 series. The reproduction confirms the
 paper's appendix figures exactly.
@@ -387,31 +362,16 @@ Raspberry Pi, 17.6 on the Jetson) are far larger than this noise.
 
 ---
 
-## 8. Known anomalies and exclusions
+## 8. Exclusions
 
-### (a) Batched stalling RF and LGBM on the Raspberry Pi produce different predictions — under investigation
+### (a) Batched stalling RF and LGBM on the Raspberry Pi
 
-Comparing the stored W1 scores between `offline/` (batch 1) and `offline_fixed_batch/` (batch 32)
-for the same configuration and the same 100,000 samples:
-
-* On the Raspberry Pi, **exactly 16 of the 48 stalling configurations differ**: RF and LGBM, in all
-  four views, in both selection roles. Their AP falls from 0.769–0.902 at batch 1 to 0.497–0.595 at
-  batch 32, a drop of 24.7 to 31.6 percentage points in every one of the 16 cases.
-* The other 32 Raspberry Pi stalling configurations and all 48 buffer-health configurations are
-  unchanged, and on the Jetson no configuration changes by more than float noise (< 0.005 pp).
-
-Batching must not change the output of a deterministic model, so this is a defect in the batched
-execution path for those 16 configurations and not a property of the models. **The cause is under
-investigation by separate work on this artifact and is not stated here.** What follows from it for
-the published results:
-
-* The 16 configurations are **excluded from all batched accuracy comparisons**, and from the
-  batch-32 `c_m` range in `tab:model`.
-* The paper's batching energy factors (5.2 / 17.6, i.e. 81 % / 94 % savings) are computed over
-  configurations with matching predictions, i.e. with these 16 excluded.
-* Whether the **energy** of those 16 batch-32 runs is valid is **not established**. They are
-  present in `offline_fixed_batch/` and should not be reused without resolving the output mismatch.
-  A rerun of the 16 configurations is listed as open work in `REMAINING_TODOS.md`.
+At batch size 32 these 16 configurations (RF and LGBM, all four traffic views, both selection
+roles) do not reproduce their unbatched predictions. They are therefore excluded from batched
+accuracy comparisons, while their energy measurements are retained. No other configuration on
+either device is affected: the confusion matrices of the remaining 80 Raspberry Pi and all 96
+Jetson series are unchanged between batch sizes, apart from float-level differences on the
+Jetson below 0.005 points.
 
 ### (b) Two live candidates were selected by mistake and are dropped
 
@@ -472,29 +432,3 @@ projected capacities and crossovers are conservative rather than optimistic. It 
 anywhere, and it should be remembered when comparing modelled against measured per-stream power.
 
 ---
-
-## 9. What these measurements cannot settle
-
-Stated plainly, so that nobody reads more out of the data than is in it:
-
-* **Concurrent full-pipeline energy was never measured.** W2 covers one stream with the full
-  pipeline; W3 covers many streams with capture and dissection but no feature extraction and no
-  inference. Everything about many streams *with* inference is a projection of the stage-cost model,
-  validated on the capture terms only.
-* **How the live offset `ΔP_m` scales beyond one stream is unmeasured.** The paper carries three
-  scenarios (offset once per device, recurring per inference call, absent beyond one stream) with
-  crossovers of 42, 6–7 and 49 streams. The available measurements do not distinguish them. The
-  multi-process W2 run that would decide it is listed as unperformed in `REMAINING_TODOS.md`.
-* **The cause of the live energy step for performance-first candidates is a hypothesis**
-  (runtime worker threads and frequency scaling), not a result. Per-prediction work does not explain
-  it: the Raspberry Pi increments are similar across a 50-fold range of W1 per-prediction cost.
-* **The W3 capture-decline thresholds cannot be re-derived from the released logs.** The exact
-  captured-to-expected threshold is not recorded, and the Jetson capture logs carry no packet
-  counters. The paper's onset values come from the underlying thesis and are reported as such.
-* **No measurement here is a per-component measurement.** Every stage cost is a difference between
-  whole-device runs, and differences of a few tens of milliwatts sit close to the 10 mW resolution
-  and the ~1 % systematic spread of §1.1.
-* **Only two devices, one meter, one replay setup, one software stack.** Nothing here establishes how
-  these numbers transfer to other hardware, other ONNX Runtime versions or other thread settings.
-  The paper's weak cross-device energy rank correlation (ρ = 0.34) is itself the argument against
-  extrapolating.

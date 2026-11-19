@@ -25,7 +25,7 @@ Two conventions matter:
     up to 1.25 points of R squared.
   * The arrays hold no run identifier, so scores cannot be broken down by run
     or by video without the per-run index arrays the pipeline wrote next to each
-    dataset. See EVALUATION_CAVEATS.md.
+    dataset.
 
 The arrays total about 325 MB and are therefore NOT part of this repository.
 Point --predictions at the `general_data` directory of the measurement data
@@ -68,7 +68,7 @@ def collect(root):
                 "samples": len(pred),
                 # The neural pipeline drops the final partial batch, so its
                 # populations are exact multiples of the batch size while the
-                # tree models' are not. See EVALUATION_CAVEATS.md.
+                # tree models' are not. See FEATURES.md section 8.
                 "multiple_of_128": len(pred) % 128 == 0,
             }
             if kqi == "stalling":

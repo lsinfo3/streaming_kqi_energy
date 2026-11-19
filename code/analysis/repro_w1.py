@@ -118,7 +118,7 @@ def report(df):
             mask = (joined.kqi == EXCLUDED_BATCHED["kqi"]) & joined.family.isin(
                 EXCLUDED_BATCHED["families"]
             )
-            joined = joined[~mask]  # predictions not preserved; see notes/batching_anomaly.md
+            joined = joined[~mask]  # predictions not preserved; see MEASUREMENTS.md section 8
         factor = (joined.b1 / joined.b32).median()
         print(
             f"  {device:<17} n={len(joined)}  median factor {factor:.2f}"

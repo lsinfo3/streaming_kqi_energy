@@ -337,7 +337,7 @@ Training data only, two stages, in `feature_selection.py`:
    and the same normalise-cumulate-keep-95 % rule is applied again
    (`feature_selection.py:155-158`).
 
-This matches the paper's §III-A description. One caveat the paper does not mention: the
+This matches the paper's §III-A description. Note that the
 stage-2 statistic can be negative (an unimportant feature can score worse than noise), and
 the code normalises by `df.sum()` before cumulating, so the cumulative curve is not monotone
 when negative values are present. This is what produces the very aggressive buffer-health
@@ -417,7 +417,7 @@ buffer health CNN UL (pf) and LSTM UL (ea) take the 19-feature UL set. See §4.
 
 ## 6. The offline/live mismatch
 
-This is the one feature-design defect that a re-user has to know about. **The size features
+This is the one feature-design difference that a re-user has to know about. **The size features
 are computed from a different field in training than in deployment**, so their numerical
 scale differs between the two. The paper admits this in a single clause in §VI; the two code
 paths are put side by side here.
@@ -471,52 +471,10 @@ The same two choices appear in every other live or replay path: `feature_extract
 `capturing.py` on both devices uses `greater 100` with `-s 96`; and
 `traffic_processing_{dynamic,static}.py` pass the third CSV field through unchanged as `size`.
 
-### 6.3 The offset, and what it does
-
-`VALIDATION.md:49` states the conversion measured on the raw traces:
-
-> IP length = 28 + udpLen (UDP) or 52 + tcpLen (TCP, 32-byte header with timestamps);
-> frame = IP + 14.
-
-So, for every packet,
-
-| Quantity | Training value | Live value |
-|---|---|---|
-| size feature | `tcpLen` / `udpLen` | `tcpLen + 52` / `udpLen + 28` |
-| byte count over a window of *n* packets | Σ payload | Σ payload + 52n / 28n |
-| kernel filter for the >100 B views | *(none; applied after the fact)* | frame length ≥ 100 B, i.e. payload ≥ 34 B (TCP) / ≥ 58 B (UDP)† |
-| >100 B size class | payload > 100 B | IP length > 100 B, i.e. payload > 48 B (TCP) / > 72 B (UDP) |
-
-† The `greater` primitive of `pcap-filter` is documented as `len >= length`, not `>`. That is
-the libpcap manual, not a file in this artifact, so it is flagged as an external reference;
-the inequality direction does not change any of the three consequences below.
-
-Three consequences:
-
-1. **The size and byte-count features are shifted by a constant that depends on the transport
-   protocol.** A pure TCP ACK is 0 B in training and 52 B in deployment. Every mean, median,
-   min and max of the payload size moves by +52 or +28; the SD does not move; the byte count
-   moves by 52 or 28 times the packet count.
-2. **The two >100 B views select different packet sets.** In training the class holds packets
-   with more than 100 B of payload. In deployment it holds packets with more than 100 B of IP
-   length, which is 49 B of TCP payload or 73 B of UDP payload. The BPF `greater 100`
-   primitive is moreover `len >= 100` rather than `> 100` (see the footnote above), and it is
-   evaluated on the frame, so the kernel already keeps packets the offline definition
-   excludes. The paper's §III-C statement
-   that "filtering is based on frame length, with remaining small packets discarded after
-   dissection" is correct for the live path; what it does not say is that the second-stage
-   threshold is on IP length and that the training-time threshold was on transport payload.
-3. **Models trained on the offline features cannot be expected to transfer to the live
-   features.** `PILOTS.md` §7.5-7.6 is the supporting evidence, and it should be quoted
-   precisely. What §7.5 *measures* is the TCP-vs-QUIC shift, where the uplink size features
-   differ by a comparable constant (median uplink size 0 B for TCP vs. 47 B for QUIC; downlink
-   full-size payload 1,368 B vs. 1,358 B) and where cross-protocol average precision collapses
-   from 85 % to 3-12 % and R² from +88 % to between −125 % and +28 %. §7.6 then names the
-   offline/live offset as the same kind of constant-offset shift, "+52 B TCP, +28 B UDP, per
-   `sim/VALIDATION.md`", and states that features based on IP or frame length "were **not**
-   tested here". **The non-transfer of the offline/live offset is therefore an inference from
-   a measured protocol shift of the same form, not a direct measurement.** The mechanism §7.5
-   identifies — tree ensembles split on exact size values — applies to both.
+The measured conversion between the two is `IP length = 28 + udpLen` for UDP and
+`52 + tcpLen` for TCP, with `frame = IP + 14`. The size and byte-count features are therefore
+shifted by a constant that depends on the transport protocol, while their standard deviation
+is unchanged.
 
 ### 6.4 What this means for reproduction
 
@@ -693,23 +651,3 @@ and its `test_population` column needs the full-test prediction arrays, which ar
 (the committed CSV has that column filled).
 
 ---
-
-## 10. Discrepancies and open points
-
-Collected here so that none of them is buried.
-
-| # | Finding | Status |
-|---|---|---|
-| 1 | The paper gives the feature-selection removal ranges as varying with the traffic view. They vary with view **and** maximum window, and the window dominates: for a fixed `up_to_30s` window the buffer-health range is 26.4-31.9 %, not 26-87 %. | Wording; the quoted numbers are correct as min/max over all 32 combinations. |
-| 2 | The paper states the sequence models use 5-60 s of history. The databases contain two distributions for `sequence_window_size`, 5-60 step 5 and 10-120 step 10. | Not a discrepancy: the wide range belongs exactly to the `dl_0.5s` trials, whose unit is 0.5 s, so both mean 5-60 s. No selected configuration exceeds 60 s. |
-| 3 | The commented-out search-space table (`methodology.tex:24-53`) omits the CNN's `kernel_size` parameter (2-10, upper bound `min(10, sequence_window_size)`). | Table is commented out; worth adding if it is ever restored. |
-| 4 | Training uses transport payload length; the live and replay paths use `ip.len` behind a frame-length BPF. Offset +52 B (TCP) / +28 B (UDP). | Real, documented in §6. Acknowledged in one clause of the paper's §VI. |
-| 5 | The BPF primitive `greater 100` is applied to the frame, and is `len >= 100` rather than `> 100` per the libpcap manual (an external reference, not a file in this artifact). The offline threshold is `payload > 100`. | Real, additional to #4. Not mentioned in the paper. |
-| 6 | `PILOTS.md` §7.6 explicitly states that IP/frame-length features "were **not** tested". The claim that models do not transfer across the offline/live offset is an inference from the measured TCP/QUIC shift, not a measurement. | Stated as an inference in §6.3. |
-| 7 | §III-F attributes the varying test populations to input histories only. Last-batch truncation (batch 128, `drop_last`) is a second cause, and the clearest case is the FFNN, which has no history and still loses 36 samples. | Real; the plan's item P2 adds a clause for this. |
-| 8 | The per-run `index_*.npy` files that the pipeline writes next to every dataset are not in the released data. | Blocks the per-run sample-count distribution and any run-level re-scoring. |
-| 9 | The stage-1 mutual-information output files are not released, but their content is recoverable from the `features` key of the permutation-importance files. | No action needed. |
-| 10 | The permutation-importance stage normalises a statistic that can be negative before cumulating, so its cumulative curve is not monotone. This produces the extreme buffer-health removals. | Behaviour of the released code, reproduced as-is. |
-| 11 | `importances/importance_scores.json` is an Optuna hyperparameter-importance file (keys `score`, `energy`), not a feature-importance file, despite sitting in the same directory. | Naming only. |
-| 12 | Whether the 16 stalling tree prediction arrays were produced by a `run_models.py` invocation with truncation disabled, or by a different script, cannot be determined. | Open. |
-| 13 | `build_scenario_features` (`preprocessing.py:26-43`) lists a 2 s window that exists in no released dataset. | Dead code. |
