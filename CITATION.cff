@@ -1,0 +1,51 @@
+cff-version: 1.2.0
+title: >-
+  Artifact for "Energy-Aware Assessment and Energy Modeling for Encrypted Video KQI Prediction
+  at the Edge"
+message: >-
+  If you use this artifact, please cite the paper it accompanies, listed under
+  preferred-citation.
+type: software
+authors:
+  - family-names: Raithel
+    given-names: Flavian
+    affiliation: University of Würzburg, Chair of Communication Networks
+  - family-names: Hoßfeld
+    given-names: Tobias
+    affiliation: University of Würzburg, Chair of Communication Networks
+  - family-names: Loh
+    given-names: Frank
+    affiliation: University of Würzburg, Chair of Communication Networks
+license: MIT
+license-url: https://github.com/
+abstract: >-
+  Measurement data, analysis code and documentation for a study of the energy cost of
+  encrypted-video Key Quality Indicator monitoring at the network edge. Covers six model
+  families for stalling detection and buffer-health estimation, four traffic views, offline and
+  live inference workloads, multi-stream capture under load, and an additive stage-cost energy
+  model, measured as whole-device AC energy on a Raspberry Pi 4 and a Jetson Orin Nano Super.
+keywords:
+  - video streaming
+  - quality of experience
+  - key quality indicator prediction
+  - energy efficiency
+  - energy model
+  - edge computing
+  - machine learning
+preferred-citation:
+  type: conference-paper
+  title: >-
+    Energy-Aware Assessment and Energy Modeling for Encrypted Video KQI Prediction at the Edge
+  authors:
+    - family-names: Raithel
+      given-names: Flavian
+      affiliation: University of Würzburg, Chair of Communication Networks
+    - family-names: Hoßfeld
+      given-names: Tobias
+      affiliation: University of Würzburg, Chair of Communication Networks
+    - family-names: Loh
+      given-names: Frank
+      affiliation: University of Würzburg, Chair of Communication Networks
+  # collection-title: filled in once the paper is accepted
+  year: 2027
+  # Fill in once the paper is accepted: doi, pages, publisher, conference location and dates.

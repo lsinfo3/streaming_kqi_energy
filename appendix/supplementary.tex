@@ -1,0 +1,139 @@
+\documentclass[10pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{float}
+\usepackage[per-mode=symbol]{siunitx}
+\sisetup{group-minimum-digits=4, group-separator={,}, range-phrase={--}, range-units=single}
+\usepackage[hidelinks]{hyperref}
+\usepackage{microtype}
+
+% Notation, matching the paper.
+\newcommand{\fALL}{\texttt{ALL}}
+\newcommand{\fALLgt}{\texttt{ALL>100B}}
+\newcommand{\fUL}{\texttt{UL}}
+\newcommand{\fULgt}{\texttt{UL>100B}}
+\newcommand{\rpi}{Raspberry~Pi}
+\newcommand{\jn}{Jetson}
+
+\title{Supplementary Material\\[2mm]
+\large Energy-Aware Assessment and Energy Modeling for\\Encrypted Video KQI Prediction at the Edge}
+\author{Flavian Raithel \and Tobias Ho{\ss}feld \and Frank Loh\\[1mm]
+\normalsize Chair of Communication Networks, University of W{\"u}rzburg, Germany}
+\date{}
+
+\begin{document}
+\maketitle
+
+\noindent
+This document accompanies the paper of the same title. It collects material that does not fit
+the page limit: robustness checks for the energy measurements, and the full hyperparameter
+search ranges. Section and table references of the form ``Section~III-C'' point into the paper.
+
+The measurement data and analysis code behind every number here, together with detailed
+documentation of the features, the selected configurations, the measurement protocol, the
+evaluation caveats and the energy model, are in the artifact repository that accompanies the
+paper.
+
+\section{Robustness Checks}\label{app:robustness}
+
+Table~\ref{tab:retention} compares each measurement series with and without the energy-based
+interquartile-range filter used in the main analysis. W1 batch-32 covers the 80 \rpi{} and 96
+\jn{} configurations with valid outputs, W2 the 21/22 valid candidates and their reference
+series, and W3 the four traffic views at 100 streams with and without dissection. The 96
+measured configurations per device correspond to the 95 distinct hyperparameter settings of
+Section~III-C, since one search selects the same trial for both selection roles.
+
+\begin{table}[H]
+\centering
+\caption{Effect of energy-outlier filtering: excluded/total runs and the maximum absolute change
+in a series mean relative to the unfiltered mean.}
+\label{tab:retention}
+\footnotesize
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+Workload & \rpi{} & \jn{} \\
+\midrule
+W1, batch 1 & 123/2880; 1.33\,\% & 58/2880; 0.88\,\% \\
+W1, batch 32 & 83/2400; 6.27\,\% & 200/2880; 5.12\,\% \\
+W2, paired series & 5/1260; 0.23\,\% & 19/1320; 0.17\,\% \\
+W3, 100 streams & 4/240; 0.22\,\% & 2/240; 0.01\,\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+For unbatched W1, removing the filter changes median whole-device savings from 71.8\,\% to
+71.7\,\% on the \rpi{} and leaves the \jn{} result at 19.4\,\%. Subtracting the twelve-hour idle
+baseline, $E-P_{\mathrm{idle}}T$, gives median savings of 75.8\,\% and 28.6\,\%; these are
+savings per completed W1 job and do not remove the baseline of an always-on monitor. For W2,
+filtering changes any candidate-minus-reference mean by at most \SI{1.87}{\joule} (\rpi{}) and
+\SI{2.14}{\joule} (\jn{}).
+
+\begin{table}[H]
+\centering
+\caption{Spearman correlation between the workstation energy objective of the selected trials and
+their W1 whole-device edge energy (16 configurations per family and device).}
+\label{tab:proxytransfer}
+\footnotesize
+\setlength{\tabcolsep}{10pt}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+Family & \rpi{} & \jn{} \\
+\midrule
+RF & 0.87 & 0.40 \\
+LGBM & 0.91 & 0.86 \\
+FFNN & 0.25 & 0.12 \\
+CNN & 0.74 & 0.56 \\
+LSTM & 0.91 & 0.91 \\
+TF & 0.76 & 0.63 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:proxytransfer} shows how well the workstation energy objective used during
+selection transfers to the edge. LGBM and LSTM transfer consistently, FFNN poorly, and RF depends
+strongly on the execution platform, where \jn{} trees run as compiled GPU tensor operations.
+Workstation-based selection is therefore a useful heuristic for some families, but it does not
+guarantee edge-optimal configurations. These correlations cover only the two selected trials per
+search; quantifying the heuristic would require measuring the selection regret relative to
+further Pareto candidates on the edge.
+
+\section{Hyperparameter Search Spaces}\label{app:search}
+
+\begin{table}[H]
+\centering
+\caption{Architecture search ranges. $2^{a:b}$ denotes powers of two with integer exponents from
+$a$ to $b$; $L$ is the input sequence length.}
+\label{tab:appendixsearch}
+\footnotesize
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{@{}l>{\raggedright\arraybackslash}p{0.78\textwidth}@{}}
+\toprule
+Family & Search dimensions \\
+\midrule
+RF & Trees 10--1000 (step 10); depth $2^{2:6}$; leaves $2^{6:12}$; minimum leaf samples 1--16; feature fraction 0.1--0.8. \\
+LGBM & Trees 10--5000 (step 10); depth $2^{2:8}$; leaves $2^{4:7}$; learning rate $10^{-5}$--$10^{-1}$. \\
+FFNN & 1--4 layers; width $2^{5:11}$. \\
+CNN & 1--3 layers; kernels $2^{4:6}$; kernel length 2--$\min(L,10)$. \\
+LSTM & 1--3 layers; hidden size $2^{4:8}$. \\
+TF & 1--3 layers; heads $2^{1:3}$; model width $2^{5:8}$; feed-forward width $2^{6:10}$. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Neural searches use learning rates $10^{-5}$--$10^{-1}$ (log scale), training batch sizes
+$2^{7:12}$, and dropout 0--0.5 in steps of 0.1; stalling positive-class weights range from 1 to
+20. Multiwindow inputs use a maximum window of 5, 10, 20, or \SI{30}{\second}, with or without
+feature selection; sequence models may also use a single 0.5 or \SI{1}{\second} window. Sequence
+histories contain 5--60 one-second vectors in steps of five, or 10--120 half-second vectors in
+steps of ten.
+
+The machine-readable form of every selected configuration, including its trial number, both
+objective values and its feature set, is \texttt{data/features/configurations.csv} in the
+artifact repository, documented in \texttt{CONFIGURATIONS.md}.
+
+\end{document}
