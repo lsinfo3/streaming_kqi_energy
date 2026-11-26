@@ -38,7 +38,7 @@ CAND = {"pi": {"light": ("buffer_health", "all", "rf", "ea"), "heavy": ("buffer_
 CV_FIT = {"pi": [2, 3], "jn": [0, 1, 2, 3]}         # views used for the c_v fit
 STEP_SIGNIFICANT = {}                             # (dev, class) -> corrected residual bootstrap 95% CI is positive
 S_CAPTURE = {("pi", "ALL"): 60, ("pi", "ALL>100B"): 70, ("pi", "UL"): 170,
-             ("jn", "ALL"): 120, ("jn", "ALL>100B"): 150}   # loss onset with dissection (Table II)
+             ("jn", "ALL"): 120, ("jn", "ALL>100B"): 150}   # loss onset with dissection (Section IV-E)
 
 
 # ======================================================================= inputs
@@ -177,6 +177,7 @@ def crossover(par, cls, view="ALL", dp="A", cx="logs", Smax=1000):
 
 # ======================================================================= validation at intermediate loads (N2)
 REF_RATIO = {}
+MIN_RUNS_VALIDATION = 8   # loads with fewer runs (single test runs) are not part of the reported validation
 
 
 def loss_ratio(dev, view, x):
@@ -184,7 +185,7 @@ def loss_ratio(dev, view, x):
     without dissection (same overlay construction). Loss-free: >= 0.98; onset: 0.95-0.98; saturated: < 0.95."""
     if (dev, view) not in REF_RATIO:
         # UL>100B: the frame-length filter keeps small packets that are discarded after dissection, so the
-        # reference is the (loss-free, Table II) 100-stream run with dissection
+        # reference is the (loss-free) 100-stream run with dissection
         r = capture_runs(dev, view, 100, view == "UL>100B")
         REF_RATIO[(dev, view)] = (r.captured_packets / r.actual).median()
     cap = x["captured_packets"] if "captured_packets" in x and (x["captured_packets"] > 0).all() else x.get("processed_packets")
@@ -355,6 +356,10 @@ def main():
         q = val[(val.dev == d) & (val.state == "loss-free") & (val.S > 1)]
         print(f"   {d} all loss-free S>1 (incl. 100-stream points not fitted): err {q.err.min():+.1f} .. {q.err.max():+.1f} %, "
               f"median |err| {q.err.abs().median():.1f} %")
+        # paper range (Section IV-F): single-run screening loads are excluded
+        q = q[q.n >= MIN_RUNS_VALIDATION]
+        print(f"   {d} PAPER loss-free S>1, >= {MIN_RUNS_VALIDATION} runs: err {q.err.min():+.1f} .. {q.err.max():+.1f} %, "
+              f"median |err| {q.err.abs().median():.1f} %  (n points {len(q)})")
     b, cc = concave_fit(val, par)
     print(f"N2.4 concave per-stream term P0 + p_S*100*(S/100)^b: b = {b:.3f}; Pi loss-free residuals linear "
           f"{cc.err.min():+.1f}..{cc.err.max():+.1f} % (rms {np.sqrt((cc.err**2).mean()):.1f}) -> concave "

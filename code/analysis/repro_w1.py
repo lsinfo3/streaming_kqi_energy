@@ -2,13 +2,13 @@
 
 Reads the per-configuration measurement CSVs of workload W1 and reproduces:
 
-  * Table II  - whole-device energy for 100,000 predictions, ALL view, both
+  * Table III - whole-device energy for 100,000 predictions, ALL view, both
                 devices, performance-first and energy-aware
-  * Section V-B - median energy-aware savings per device and per KQI, and the
+  * Section IV-B - median energy-aware savings per device and per KQI, and the
                 number of configuration pairs whose energy increases
-  * Section V-C - the batch-1 to batch-32 energy factor, the baseline share of
+  * Section IV-C - the batch-1 to batch-32 energy factor, the baseline share of
                 W1 energy, and the number of configurations finishing under 10 s
-  * Table II footnote - the share of configurations whose 95 % confidence
+  * Table III footnote - the share of configurations whose 95 % confidence
                 interval stays below 2 % of the mean
 
 Each input CSV holds 30 repetitions of one configuration. Energy is the
@@ -85,7 +85,7 @@ def report(df):
 
     print(f"series loaded: {len(df)} ({len(one)} at batch 1, {len(thirtytwo)} at batch 32)\n")
 
-    print("== Table II: whole-device energy for 100,000 predictions, ALL view [J] ==")
+    print("== Table III: whole-device energy for 100,000 predictions, ALL view [J] ==")
     for kqi in ("stalling", "buffer_health"):
         table = one[(one.kqi == kqi) & (one.view == "all")].pivot_table(
             index="family", columns=["device", "selection"], values="energy_j"
@@ -93,7 +93,7 @@ def report(df):
         print(f"\n{kqi}")
         print(table.round(0).to_string())
 
-    print("\n== Section V-B: median energy-aware saving, 48 pairs per device ==")
+    print("\n== Section IV-B: median energy-aware saving, 48 pairs per device ==")
     for device in DEVICES:
         pairs = (
             one[one.device == device]
@@ -108,7 +108,7 @@ def report(df):
             f"  increases: {(saving > 0).sum()}"
         )
 
-    print("\n== Section V-C: batch-1 to batch-32 energy factor ==")
+    print("\n== Section IV-C: batch-1 to batch-32 energy factor ==")
     for device in DEVICES:
         key = ["kqi", "view", "family", "selection"]
         a = one[one.device == device].set_index(key)["energy_j"]
@@ -125,7 +125,7 @@ def report(df):
             f"  -> {100 * (1 - 1 / factor):.0f} % saving"
         )
 
-    print("\n== Section V-C: baseline share of W1 energy, and short runs ==")
+    print("\n== Section IV-C: baseline share of W1 energy, and short runs ==")
     for device in DEVICES:
         sub = one[one.device == device]
         share = 100 * (IDLE_POWER_W[device] * sub.duration_s / sub.energy_j).median()
@@ -136,7 +136,7 @@ def report(df):
             f"  | shortest run {sub.duration_s.min():.1f} s"
         )
 
-    print("\n== Table II footnote: confidence intervals ==")
+    print("\n== Table III footnote: confidence intervals ==")
     for label, sub in (("batch 1", one), ("batch 32", thirtytwo)):
         print(
             f"  {label:<9} CI below 2 % of the mean for {(sub.ci_rel_pct < 2).mean() * 100:.1f} %"

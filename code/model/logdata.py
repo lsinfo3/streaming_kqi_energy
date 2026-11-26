@@ -1,5 +1,5 @@
 """Loaders for the per-run measurement logs in data_masters_thesis/measurements.
-Means after removing outliers outside 1.5 IQR (as stated in Sec. III-D).
+Means after removing outliers outside 1.5 IQR (as stated in Section III-E).
 
 Scalar helpers (capture, w1, live_step, ...) return cleaned means; the *_runs helpers return the
 cleaned per-run values that the bootstrap in uncertainty.py resamples."""

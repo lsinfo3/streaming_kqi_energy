@@ -6,7 +6,7 @@ NumPy arrays. This script recomputes the reported metrics from those arrays:
 average precision and F1 at the stored validation-optimal threshold for
 stalling, R squared and mean absolute error for buffer health.
 
-Reproduces, among others, the Section V-A figures for the ALL view: LightGBM
+Reproduces, among others, the Section IV-A figures for the ALL view: LightGBM
 performance-first at 89.4 % average precision and 79.4 % F1 for stalling, and
 LSTM performance-first at R squared 93.2 % with a mean absolute error of 5.9 s
 for buffer health.

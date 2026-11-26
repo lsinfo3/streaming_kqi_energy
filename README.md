@@ -18,7 +18,7 @@ Raspberry Pi 4 Model B and a GPU-equipped Jetson Orin Nano Super.
 | [`CONFIGURATIONS.md`](CONFIGURATIONS.md) | Every selected configuration with its hyperparameters and objective values, reconstructed from the search databases |
 | [`MEASUREMENTS.md`](MEASUREMENTS.md) | The measurement protocol: meter, device settings, the three workloads, repetitions, statistics, exclusions |
 | [`ENERGY_MODEL.md`](ENERGY_MODEL.md) | The additive stage-cost model, how each parameter is calibrated, and how to re-run it |
-| [`appendix/supplementary.pdf`](appendix/supplementary.pdf) | The supplementary document the paper cites: robustness checks for the energy measurements and the full hyperparameter search ranges |
+| [`supplementary.pdf`](supplementary.pdf) | The supplementary document the paper cites: robustness checks for the energy measurements and the full hyperparameter search ranges |
 | [`code/`](code/) | `analysis/` reproduction scripts, `model/` the energy model, `baseline/` the linear baselines, `features/` the feature and configuration generators, `figures/` the figure scripts |
 | [`data/`](data/) | The measurement series, the 12 search databases, feature importances and derived tables. See [`data/README.md`](data/README.md) |
 
@@ -32,16 +32,17 @@ Raspberry Pi 4 Model B and a GPU-equipped Jetson Orin Nano Super.
 | Full-test prediction scores, e.g. LightGBM at 89.4 % AP and LSTM at R² 93.2 % | reproduces exactly |
 | Every calibrated parameter of the stage-cost energy model | reproduces exactly |
 | Confidence-interval and outlier-filter statements | reproduces exactly |
+| Live single-stream increments, prediction counts and device comparison (W2) | reproduces exactly |
+| Capture energy at 100 streams, capture-rate decline and deferred dissection (W3) | reproduces |
+| Parameter-count and cross-device rank correlations | reproduces exactly |
 
 `REPRODUCE.md` gives the command for each.
 
 ## Scope of the prediction scores
 
 The dataset split assigns playback runs at random rather than videos, so test runs generally play
-a video that also occurs in training, and 18 % of them have a byte-identical copy in training.
-The scores therefore describe monitoring of a known video catalogue. A retraining pilot with a
-video-grouped split, reported in the paper, puts the cost of unseen content at 11 to 22 points of
-average precision and 18 to 23 points of R². The energy results do not depend on label quality
+a video that also occurs in training, under different network conditions. The scores therefore
+describe monitoring of a known video catalogue. The energy results do not depend on label quality
 and are unaffected.
 
 For concurrent load, packet capture and dissection are validated against held-out loads. The
@@ -54,10 +55,6 @@ The traffic and player-state data are not redistributed here. They are the publi
 streaming dataset of Loh et al., 11,142 playback runs over 246 videos and 1,081 hours of
 streaming; see the dataset references in the paper. This repository contains the measurements
 taken on top of it, the derived tables and the code.
-
-One property of that dataset is worth passing on independently of this paper: it contains 1,161
-pairs of byte-identical playback runs recorded under two run numbers. `data/derived/` holds the
-per-run video identities from which the pair list is regenerated.
 
 ## Requirements
 

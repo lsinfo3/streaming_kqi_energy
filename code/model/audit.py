@@ -1,4 +1,4 @@
-"""Recompute the v5 offset correction and its downstream projections.
+"""Recompute the live-offset correction (Section III-F) and its downstream projections.
 
 Run from any directory with Python, NumPy, pandas, SciPy and Matplotlib.
 The report is written beside this script; original thesis data remain unchanged.

@@ -15,9 +15,9 @@ candidates), `tab:model` (the calibrated energy-model parameters), `fig:perf` (f
 `fig:offline` (W1 energy against score) and `fig:live` (live energy differences).
 
 File paths in this document are given relative to `measurements/` in the released measurement tree
-(`data_masters_thesis/measurements/` in the source tree); per `ARTIFACT_AND_FIX_PLAN.md` §3 the
-artifact repository ships the W1 and W3 CSVs under `data/`. Measurement code paths are relative to
-`master_thesis/src/`.
+(`data_masters_thesis/measurements/` in the source tree); this repository ships the series under
+`data/` (see `data/README.md`). Measurement code paths refer to the original experiment code
+(`master_thesis/src/`), which is not part of this repository.
 
 Traffic views use the paper's notation: **ALL** (all video-flow packets), **ALL>100B**, **UL**
 (uplink only), **UL>100B**. In file and directory names these appear as `all`, `gt_100`,
@@ -81,15 +81,14 @@ consequences for interpretation:
   in a way a fixed-clock measurement would not.
 * Frequency scaling and ONNX Runtime worker threads are the paper's stated hypothesis (in "Live
   Single-Stream Pipeline Monitoring") for the live-energy step that appears for performance-first candidates and for none of the
-  energy-aware ones. That hypothesis is **not tested** by these measurements. A governor and
-  thread-setting comparison is listed as unperformed future work in `REMAINING_TODOS.md`.
+  energy-aware ones. That hypothesis is **not tested** by these measurements.
 * ONNX Runtime ran with default thread settings on both devices, using the CPU execution provider on
   the Raspberry Pi and the CUDA execution provider on the Jetson. The exact thread settings used are
   not recorded in the released data; the only available statement is that all runs used the same
   settings.
 
 Inference is in ONNX Runtime; tree ensembles are converted to tensor operations with Hummingbird,
-except where noted in §7(a).
+except where noted in §8(a).
 
 ---
 
@@ -113,7 +112,7 @@ and filter → feature extraction → inference). Only the monitor is metered.
 * The workstation replays one video stream with `tcpreplay`; the monitor captures with `tshark`,
   dissects, extracts features and predicts once per second.
 * Predictions are issued only when the feature windows contain new packets, so a five-minute run
-  issues fewer than 300 predictions (see §7(d)).
+  issues fewer than 300 predictions (see §8(d)).
 * Measurement interval: **five minutes** (stored `tf_duration` ≈ 299–300 s), inside replay traces of
   about six minutes that include guard time. Five minutes matches the median playback duration in
   the dataset.
@@ -153,10 +152,11 @@ and filter → feature extraction → inference). Only the monitor is metered.
   per-load repetition counts are visible directly in the CSVs. Examples: Raspberry Pi
   `header_only_dissection` has 30 repetitions at 1, 50–100 streams but a single run at 20, 30 and 40
   streams; Jetson `header_only_uplink_only_dissection` has 30 repetitions at 1 and 100 streams and
-  1–9 runs at 150–400 streams.
+  1–9 runs at 150–400 streams. The single-run loads were screening runs; the energy-model validation
+  uses only loads with at least 8 runs (see `ENERGY_MODEL.md` §6.1).
 * Capture-only series (`header_only`) extend to 1,000 streams and some Jetson dissection series to
-  400 streams, i.e. beyond the reliable replay range. Per `REMAINING_TODOS.md`, Jetson loads above
-  200 streams were **dropped from the energy-model validation**. Anyone reusing those high-load
+  400 streams, i.e. beyond the reliable replay range. Jetson loads above 200 streams are **not used**
+  in the energy-model validation. Anyone reusing those high-load
   points should treat them as replay-limited rather than device-limited.
 
 ---
@@ -258,9 +258,10 @@ also in seconds.
 
 W2 and W3 CSVs add replay and capture accounting: `actual, successful, failed, truncated,
 retried_enobufs, retried_eagain` (the replay side) and `captured_packets, dropped_packets`. W2 adds
-`processed_elements` and `predictions`. `dropped_packets` is `-1` where the counter was unavailable,
-and the Jetson capture logs have no packet counters at all — which is why the paper's Jetson
-capture-decline thresholds cannot be re-derived from the logs (§8).
+`processed_elements` and `predictions`. `dropped_packets` is `-1` where the counter was unavailable.
+Above 100 streams the Jetson capture logs have no capture counter (`captured_packets` is `-1`);
+there, `processed_packets` (the packets that reached dissection) is used instead, as in
+`code/analysis/repro_w3.py`.
 
 ### The schema is device-dependent
 
@@ -345,13 +346,13 @@ So the filter removes about 3 % of the measurements and moves no reported batch-
 
 **Confidence-interval quality, batch 1:** the 95 % interval is **below 2 % of the mean for 97.9 %**
 of the 192 configuration-device series (188 of 192), with a maximum of **3.27 %** (Raspberry Pi, ALL
-stalling LSTM-pf). This is the footnote of `tab:all`, which rounds to "98 %" and "at most 3.4 %".
+stalling LSTM-pf). These figures back the footnote of `tab:all`.
 
 **Batch 32 (`offline_fixed_batch/`) is noisier**, as expected from much shorter runs:
 
 | | Removed | Largest change in any series mean |
 |---|---|---|
-| Raspberry Pi (excluding the 16 configurations of §7(a)) | 83 / 2,400 | **6.27 %** (UL buffer-health FFNN-ea) |
+| Raspberry Pi (excluding the 16 configurations of §8(a)) | 83 / 2,400 | **6.27 %** (UL buffer-health FFNN-ea) |
 | Jetson | 200 / 2,880 (6.94 %) | **5.12 %** (UL buffer-health LSTM-ea) |
 
 Including the 16 excluded Raspberry Pi stalling RF/LGBM configurations, the Raspberry Pi maximum
@@ -386,20 +387,15 @@ They are dropped, leaving **23 candidates on the Raspberry Pi and 24 on the Jets
 tree still contains 24 and 25 candidate directories respectively, so the two files must be filtered
 out explicitly when reusing the data.
 
-This matters for one headline number. Recomputing all candidate-minus-reference differences (30
-runs each, 1.5-IQR filtered means) gives, on the Raspberry Pi:
+Recomputing all candidate-minus-reference differences (30 runs each, 1.5-IQR filtered means)
+gives, on the Raspberry Pi:
 
 * the 10 valid performance-first candidates: **+62.6 J to +99.1 J (8.4 % to 12.8 %)**;
 * the 11 valid energy-aware candidates: **+0.6 J to +6.4 J (at most 0.86 %)**;
-* the dropped UL buffer-health LGBM-ea: **+104.5 J (13.6 %)** — larger than any valid candidate,
-  which is why the paper's live maximum is 13 % rather than 14 %.
+* the dropped UL buffer-health LGBM-ea: **+104.5 J (13.6 %)**, larger than any valid candidate.
 
-On the Jetson no valid candidate exceeds **+14.5 J (1.13 %)**. These reproduce the paper's "at most
-6.4 J (0.9 %)" and "no valid candidate adds more than 15 J (1.1 %)" exactly. The lower end of the
-performance-first range recomputes to 62.6 J, against 66 J in the paper text and 63 J in
-`REMAINING_TODOS.md`; the three agree once the aggregation is fixed (the median difference for that
-series is 65.2 J and the unfiltered mean 60.9 J), so the quoted bound depends on which estimator is
-used and the paper's figure is not reproduced by the filtered mean.
+On the Jetson no valid candidate exceeds **+14.5 J (1.13 %)**. `code/analysis/repro_w2.py` prints
+these values.
 
 Also worth knowing when reusing the shortlist: selecting candidates on validation results instead of
 W1 results leaves the lowest-energy candidates unchanged, but changes three of the eight
@@ -424,7 +420,7 @@ predictions per run is what the paper quotes.
 
 ### (d) The energy model assumes one prediction per second; live runs issue 0.8–0.9
 
-Equation (1) uses `f = 1 Hz` for feature extraction and inference. The valid W2 candidates issue
+Equation (1) uses `f = 1/s` for feature extraction and inference. The valid W2 candidates issue
 238–273 predictions in a 299–300 s run, i.e. **0.80–0.91 predictions per second**. The model
 therefore charges 10–20 % more inference and feature-extraction work per stream than the live runs
 performed. The difference is small, and in the direction that **over**states per-stream cost, so the

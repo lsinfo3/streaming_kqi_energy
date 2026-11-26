@@ -68,7 +68,7 @@ and the extra machinery matters for reading the results:
 * **A residual scaling factor `k`** multiplies the capture term `S * (p_rx + r_v * c_v)`. It is
   1 in the point model; the uncertainty analysis draws it from the validation residuals (§6).
 * **An optional concave capture term** `100 * k * (p_rx + r_v*c_v) * (S/100)^b` exists for a
-  sensitivity check only (`b` fitted to 0.756). The paper keeps the linear term; see §9.
+  sensitivity check only (`b` fitted to 0.756). The paper keeps the linear term.
 * **The reported quantity** in the scaling results is energy per stream-hour,
   `e(S) = 3600 * P(S) / S`, and a *crossover* is the smallest `S` at which the Jetson's `e(S)`
   falls below the Raspberry Pi's.
@@ -359,19 +359,21 @@ this comparison; feature extraction and inference are not active in W3.
 
 Recomputed error ranges, `(model − measured) / measured` on power:
 
-| Device | loss-free intermediate loads | points |
+| Device | loss-free intermediate loads, at least 8 runs | points |
 |---|---|---|
-| Raspberry Pi | **−9.3 % … +12.7 %**, median absolute error 5.9 % | 18 |
-| Jetson | **+0.3 % … +4.3 %**, median absolute error 1.5 % | 11 |
+| Raspberry Pi | **−9.3 % … +12.7 %**, median absolute error 6.6 % | 15 |
+| Jetson | **+0.3 % … +3.9 %**, median absolute error 1.1 % | 9 |
 
-These are the paper's figures. Verified. Three further facts belong with them:
+These are the paper's figures (`MIN_RUNS_VALIDATION = 8` in `energy_model.py`). Verified. Three
+further facts belong with them:
 
 * The extremes on the Pi are −9.3 % at 10 streams of full-packet capture and +12.7 % at 170
-  streams under UL; both are 30-run means. The Pi's loss-free set *also* contains three
-  single-run points (ALL at 20, 30 and 40 streams, errors −6.6 %, −3.4 %, −2.2 %), and the
-  Jetson's contains two (UL at 150 and 200 streams, +3.5 % and +4.3 %). The paper's
-  parenthetical "including two single-run measurements" matches the Jetson set; the Pi set has
-  three such points, and the +4.3 % end of the Jetson range *is* one of them.
+  streams under UL; both are 30-run means. The remaining loads have 8–30 runs.
+* **Single-run loads are excluded**: they were screening runs used to locate the capture-rate
+  decline. They are the Pi's ALL at 20, 30 and 40 streams (errors −6.6 %, −3.4 %, −2.2 %) and the
+  Jetson's UL at 150 and 200 streams (+3.5 %, +4.3 %). Including them would give
+  −9.3 % … +12.7 % (18 points, median 5.9 %) and +0.3 % … +4.3 % (11 points, median 1.5 %).
+  The uncertainty analysis (§6.2) uses only loads with at least 8 runs as well.
 * The validation set includes the `FULL` (complete-capture) view, which is not one of the four
   traffic views of the paper; it is modelled with the ALL packet rate and the same `c_v`.
 * Saturated and onset loads are excluded from the quoted range. There the model is too high by
@@ -404,8 +406,9 @@ the transfer of stage measurements to concurrent load, not by measurement noise.
   budget gives 12–27 (Pi) and 33–48 (Jetson) streams if all stages share a single thread, and
   58 (Pi) and 120 (Jetson) if all core time is spread perfectly over all cores with dissection
   still single-threaded. The 33–50 figure is the one-core-per-stage range for the light and
-  batched classes; the heavy class gives 28–50 under the same assumption, which explains the
-  28–50 that appears in some working notes.
+  batched classes; the heavy class gives 28–50 under the same assumption. Under UL, the light
+  predictor gives 69–104 (Pi) and 108–163 (Jetson) streams with one core per stage, the UL
+  capacities of Section IV-F.
 * **Device choice for heavy predictors**, for the reason given in §5.
 
 ### 6.4 The robust scaling claim
@@ -413,10 +416,7 @@ the transfer of stage measurements to concurrent load, not by measurement noise.
 The paper's positive scaling claim is deliberately narrow: with light predictors the Pi stays
 cheaper per stream through 44 ALL streams or 103 UL streams in at least 95 % of draws under all
 considered offset assumptions. Recomputed, the claim holds in 95.5 % of draws at 44 ALL
-streams and 95.1 % at 103 UL streams, in every structural scenario. Verified. The wider
-statements that earlier drafts carried (Pi cheaper up to 70 ALL or 107 UL streams with the
-heaviest model, or up to its capture capacity with light ones) fail that test, the first two in
-0 % of draws under scenario A with feature extraction counted.
+streams and 95.1 % at 103 UL streams, in every structural scenario. Verified.
 
 ---
 
@@ -441,9 +441,8 @@ python3 uncertainty.py      # bootstrap, scenarios, figure; ~10 s after the inpu
 python3 audit.py            # writes audit_results.json beside the script
 ```
 
-The v5 README states the audit command as `python model/audit.py`; the script itself imports
-`uncertainty` as a top-level module, so it must be started with the model directory on
-`sys.path` — run it from inside that directory, or set `PYTHONPATH` to it. Reading the
+`audit.py` imports `uncertainty` as a top-level module, so it must be started with the model
+directory on `sys.path` — run it from inside that directory, or set `PYTHONPATH` to it. Reading the
 percentile arrays in `audit_results.json`: they are ordered 5th / 50th / 95th unless the key
 says `CI95`, in which case they are the 2.5th and 97.5th percentiles of a bootstrap.
 
@@ -453,14 +452,12 @@ figure). The code was exercised here with NumPy 1.26, pandas 2.2, SciPy 1.13 and
 
 ### 7.2 Inputs, and what breaks outside the original machine
 
-`logdata.py` resolves the data root as `<model directory>/../../data_masters_thesis`. That is
-the only path configuration in the code and it is **relative to the model file's own
-location**, so the model directory must sit exactly two levels below a directory that contains
-`data_masters_thesis/`. In the artifact layout (`artifact/code/model/`) that resolves to
-`artifact/data_masters_thesis`, which does not exist; create a symlink there to the measurement
-tree, or run the code from a directory laid out like the original
-`<root>/noms_paper/model/` beside `<root>/data_masters_thesis/`. Confirmed by running: with
-that symlink in place, all three scripts complete against the released logs.
+`logdata.py` resolves the data root as `<model directory>/../../data_masters_thesis`, the name of
+the original measurement tree. That is the only path configuration in the code and it is
+relative to the model file's own location. In this repository (`code/model/`) it resolves to
+`data_masters_thesis/` at the repository root: create a symlink there to the measurement tree, or
+set `logdata.DATA` and `logdata.ROOT` before importing `energy_model`. With the measurement tree in
+place, all three scripts complete.
 
 Within the data root, the model reads:
 
@@ -475,19 +472,10 @@ Within the data root, the model reads:
 The measurement dataset is not redistributed with this repository; see the repository README for
 where it comes from.
 
-Two further portability notes, both verified by running the code:
-
-* `uncertainty.py` writes its figure to `../figures/energy_model.pdf`. Matplotlib does not
-  create missing directories, so `../figures/` must exist or the script ends with a
-  `FileNotFoundError` after printing all of its results.
-* The same function then writes a second copy as PNG to a **hardcoded absolute path inside a
-  session scratchpad directory** from the original machine. That directory still happened to
-  exist on the machine used for this write-up, so the script completed; on any other machine
-  the line raises `FileNotFoundError`. It is the last statement of the figure routine, so all
-  printed results and the PDF are already written when it fails, but the script exits non-zero.
-  The line should be deleted before the code is published.
-* `python figures_src/redraw.py --model-only`, the other command in the v5 README, needs the
-  paper's figure sources, which are not part of the model directory.
+Most of these series are also in this repository under `data/` (`w3_capture/`, `w1_offline/`,
+`w2_live/`, `feature_extraction/`, `processing/`, `idle/`), in a flatter layout; the packet-rate
+statistics `pcap_stats/` (about 1.1 GB) are not. `uncertainty.py` writes its figure to
+`../figures/energy_model.pdf`; create that directory first.
 
 ### 7.3 What `audit.py` guarantees
 
@@ -497,23 +485,3 @@ assertions check that the residual plus the prediction work recovers the observe
 exactly, that the batched heavy class reuses the unbatched residual, and that scenarios A, B
 and C agree at one stream. It does not check the model against any measurement; that is
 `energy_model.validation()`.
-
-### 7.4 A note on which copy of the code to use
-
-The archive contains two versions of `energy_model.py`. They differ in exactly one respect,
-the offset accounting of §4:
-
-* the **v0** version sets `dP_m` to the raw W2 inference-minus-reference power difference and
-  keeps it when a two-sided Welch test on the absolute difference clears zero. Run against the
-  released data, it yields `dP_m` = 294.7 mW (Pi heavy) and 24.6 mW (Jetson heavy) — the
-  Jetson offset is *retained* as significant.
-* the **v5** version subtracts the actual prediction rate times the unbatched `c_m`, clips the
-  residual at zero and retains it only when a paired bootstrap 95 % interval is strictly
-  positive. This is the version the paper describes and the one that produces Table IV's
-  0.279 W / 0 W.
-
-`logdata.py` and `uncertainty.py` are byte-identical between the two. Only the v5
-`energy_model.py` reproduces the paper, so that is the copy the artifact should ship. See §9
-for why this matters.
-
----

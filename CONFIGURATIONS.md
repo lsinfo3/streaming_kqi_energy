@@ -473,7 +473,7 @@ is energy-aware.
 
 W2 evaluates a subset of these configurations, chosen per device from the W1 results:
 for each view and KQI the highest-scoring, lowest-energy and knee configuration across
-families (paper Table I). The per-device shortlists with the scores, energies, the Pareto
+families (paper Table II). The per-device shortlists with the scores, energies, the Pareto
 flag and the two balance criteria are in
 `selected_models/{raspberry_pi,jetson_nano_orin}/{kqi}_{view_code}.csv`
 (16 files, columns `energy, score, energy_scaled, score_scaled, pareto, combined_utopian,
